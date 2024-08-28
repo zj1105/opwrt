@@ -78,12 +78,12 @@ void parse_post_data(const char *data, char *action, char* param) {
 
     parsed_json = json_tokener_parse(data);
     
-    action = json_get_string_value(parsed_json);
+    action = json_get_string_value_by_field(parsed_json, "action");
     
     if(!strcmp(action, "login")) {
       json_param = json_get_json_object_by_field(parsed_json, "param");
-      char *admin = json_get_string_value(json_param);
-      char *passwd = json_get_string_value(json_param);
+      char *admin = json_get_string_value_by_field(json_param, "admin");
+      char *passwd = json_get_string_value_by_field(json_param, "passwd");
       
       if(!strcmp(admin, "admin") && !strcmp(passwd, "123456789")) {
         printf("{\"error\":0}");
