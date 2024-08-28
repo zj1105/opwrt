@@ -1,6 +1,6 @@
 # opwrt
 
-##popen()函数的使用
+## popen()函数的使用
     
     int execute_command(const char *cmd, char *output, size_t size) {
 	
