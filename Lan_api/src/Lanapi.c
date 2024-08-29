@@ -125,8 +125,8 @@ void parse_post_data(const char *data, char *action, char* param) {
             return;
     }  
     } else if(!strcmp(action, "getdhcp")) {
-		execute_command("uci get network.lan.ipaddr", ipaddr,MAX_SIZE);
-		execute_command("uci get network.lan.netmask", netmask, MAX_SIZE);
+        execute_command("uci get network.lan.ipaddr", ipaddr,MAX_SIZE);
+        execute_command("uci get network.lan.netmask", netmask, MAX_SIZE);
         execute_command("uci get network.lan.ip6assign", ip6assign, MAX_SIZE);
         execute_command("uci get network.lan.multicast_querier", multicast_querier, MAX_SIZE);
         execute_command("uci get network.lan.igmp_snooping", igmp_snooping, MAX_SIZE);
@@ -141,7 +141,7 @@ void parse_post_data(const char *data, char *action, char* param) {
 
         struct json_object *myJson = NULL;
         myJson = json_object_new_object();
-		json_object_object_add(myJson,"ipaddr",oipaddr);
+        json_object_object_add(myJson,"ipaddr",oipaddr);
         json_object_object_add(myJson,"netmask",onetmask);
         json_object_object_add(myJson,"ip6assign",oip6assign);
         json_object_object_add(myJson,"multicast_querier",omulticast_querier);
@@ -149,17 +149,69 @@ void parse_post_data(const char *data, char *action, char* param) {
         json_object_object_add(myJson,"ieee1905managed",oieee1905managed);
         printf("%s",json_object_to_json_string(myJson));
 
-		json_object_put(oipaddr);
-		json_object_put(onetmask);
-		json_object_put(oip6assign);
-		json_object_put(omulticast_querier);
-		json_object_put(oigmp_snooping);
-		json_object_put(oieee1905managed);
-		json_object_put(myJson);
+	json_object_put(oipaddr);
+	json_object_put(onetmask);
+	json_object_put(oip6assign);
+	json_object_put(omulticast_querier);
+	json_object_put(oigmp_snooping);
+	json_object_put(oieee1905managed);
+	json_object_put(myJson);
 
+    } else if(!strcmp("GetVersion",action)) {
+		char openwrt[MAX_SIZE] = {0};
+		char kernel[MAX_SIZE] = {0};
+		char fw_version[MAX_SIZE] = {0};
+		char full_fw_version[MAX_SIZE] = {0};
+		char vendor_version[MAX_SIZE] = {0};
+		
+		execute_command("cat /etc/openwrt_version", openwrt,MAX_SIZE);
+		execute_command("uname -r", kernel, MAX_SIZE);
+		
+		get_value_config("FW_VERSION",fw_version);
+		get_value_config("VENDOR_ASKEY_VERSION",vendor_version);
+		get_value_config("FULL_FW_VERSION",full_fw_version);
+
+        struct json_object *Version_json = json_object_new_object();
+        json_object_object_add(Version_json,"openwrt",json_object_new_string(openwrt));
+        json_object_object_add(Version_json,"kernel",json_object_new_string(kernel));
+        json_object_object_add(Version_json,"fw_version",json_object_new_string(fw_version));
+        json_object_object_add(Version_json,"full_fw_version",json_object_new_string(fw_version));
+        json_object_object_add(Version_json,"vendor_version",json_object_new_string(vendor_version));
+        printf("%s",json_object_to_json_string(Version_json));
+
+	} else if(!strcmp(action, "setDHCP")) {
+        char cmd[512] = {0};
+        char *mipaddr = json_get_string_value_by_field(parsed_json,"ipaddr");
+        char *mnetmask = json_get_string_value_by_field(parsed_json,"netmask");
+        char *mlimit = json_get_string_value_by_field(parsed_json, "limit");
+        char *mstart = json_get_string_value_by_field(parsed_json, "start");
+        char *mleasetime = json_get_string_value_by_field(parsed_json, "leasetime");
+
+        memset(cmd,0,512);
+        sprintf(cmd,"uci set network.lan.ipaddr=%s", mipaddr);
+        system(cmd);
+
+        sprintf(cmd,"uci set network.lan.netmask=%s", mnetmask);
+        system(cmd);
+
+        sprintf(cmd,"uci set network.lan.limit=%s", mlimit);
+        system(cmd);
+
+        sprintf(cmd,"uci set network.lan.start=%s", mstart);
+        system(cmd);
+
+        sprintf(cmd,"uci set network.lan.leasetime=%s", mleasetime);
+        system(cmd);
+
+        system("uci commit");
+        system("/etc/init.d/network restart");
+
+        printf("{\"error\":0}");
+    } else if(!strcmp(action, "setWIFI")){
+        
     } else {
-        printf("{\"error\":66,\"message\":\"not found this action\"}");
-        return;
+        	printf("{\"error\":66,\"message\":\"not found this action\"}");
+        	return;
     }
     json_object_put(json_param);
  
@@ -167,7 +219,43 @@ void parse_post_data(const char *data, char *action, char* param) {
 }
 
 
+void get_value_config(const char *key,char *value) {
+    size_t value_size = MAX_SIZE;
+	char line[MAX_SIZE] = {0};
+	FILE *file = fopen("/etc/system_version.info","r");
+    if(file == NULL) {
+        perror("fopen file failed");
+        return;
+    } 
+	
+	while(fgets(line, sizeof(line) - 1, file) != NULL) {
+		char *pos = strchr(line, '=');
+        if(pos == NULL ) {
+            perror("find = failed");
+            return;
+        }
+        *pos = '\0';
+        char *current_key = line;
+        char *current_value = pos + 1;
+        char *new_pos = strchr(current_value, '\n');
+        if(new_pos != NULL) {
+            *new_pos = '\0';
+        }
+        if(!strcmp(key, current_key)) {
+            //size_t value_size = sizeof(current_value);
+            if(strlen(current_value) < value_size) {
+                strncpy(value,current_value, value_size - 1);
+                value[value_size - 1] = '\0';
+            } else {
+                printf("\"error\":12138,\"message\":\"value len is too large\"\n");
+            }
+        }
+        
+	}
 
+    fclose(file);
+	
+}
 const char *json_get_string_value_by_field(struct json_object *json, const char *p_field)
 {
     struct json_object *string_json = NULL;
